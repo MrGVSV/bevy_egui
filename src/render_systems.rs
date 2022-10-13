@@ -1,7 +1,4 @@
-use crate::{
-    egui_node::EguiPipeline, EguiContext, EguiManagedTextures, EguiRenderOutput, EguiSettings,
-    WindowSize,
-};
+use crate::{egui_node::EguiPipeline, EguiContext, EguiManagedTextures, EguiRenderOutput, EguiRenderOutputMap, EguiSettings, EguiWindowSizeMap, WindowSize};
 use bevy::{
     asset::HandleId,
     prelude::*,
@@ -19,9 +16,16 @@ use bevy::{
     window::WindowId,
 };
 
+#[derive(Resource)]
 pub(crate) struct ExtractedRenderOutput(pub HashMap<WindowId, EguiRenderOutput>);
+
+#[derive(Resource)]
 pub(crate) struct ExtractedWindowSizes(pub HashMap<WindowId, WindowSize>);
+
+#[derive(Resource)]
 pub(crate) struct ExtractedEguiSettings(pub EguiSettings);
+
+#[derive(Resource)]
 pub(crate) struct ExtractedEguiContext(pub HashMap<WindowId, egui::Context>);
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -32,30 +36,31 @@ pub(crate) enum EguiTexture {
     User(u64),
 }
 
+#[derive(Resource)]
 pub(crate) struct ExtractedEguiTextures {
     pub(crate) egui_textures: HashMap<(WindowId, u64), Handle<Image>>,
     pub(crate) user_textures: HashMap<Handle<Image>, u64>,
 }
 
 impl ExtractedEguiTextures {
-    pub(crate) fn handles(&self) -> impl Iterator<Item = (EguiTexture, HandleId)> + '_ {
+    pub(crate) fn handles(&self) -> impl Iterator<Item=(EguiTexture, HandleId)> + '_ {
         self.egui_textures
             .iter()
             .map(|(&(window, texture_id), handle)| {
-                (EguiTexture::Managed(window, texture_id), handle.id)
+                (EguiTexture::Managed(window, texture_id), handle.id())
             })
             .chain(
                 self.user_textures
                     .iter()
-                    .map(|(handle, id)| (EguiTexture::User(*id), handle.id)),
+                    .map(|(handle, id)| (EguiTexture::User(*id), handle.id())),
             )
     }
 }
 
 pub(crate) fn extract_egui_render_data(
     mut commands: Commands,
-    egui_render_output: Extract<Res<HashMap<WindowId, EguiRenderOutput>>>,
-    window_sizes: Extract<Res<HashMap<WindowId, WindowSize>>>,
+    egui_render_output: Extract<Res<EguiRenderOutputMap>>,
+    window_sizes: Extract<Res<EguiWindowSizeMap>>,
     egui_settings: Extract<Res<EguiSettings>>,
     egui_context: Extract<Res<EguiContext>>,
 ) {
@@ -82,7 +87,7 @@ pub(crate) fn extract_egui_textures(
     });
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub(crate) struct EguiTransforms {
     pub buffer: DynamicUniformBuffer<EguiTransform>,
     pub offsets: HashMap<WindowId, u32>,
@@ -111,10 +116,8 @@ pub(crate) fn prepare_egui_transforms(
     mut egui_transforms: ResMut<EguiTransforms>,
     window_sizes: Res<ExtractedWindowSizes>,
     egui_settings: Res<ExtractedEguiSettings>,
-
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
-
     egui_pipeline: Res<EguiPipeline>,
 ) {
     egui_transforms.buffer.clear();
@@ -149,6 +152,7 @@ pub(crate) fn prepare_egui_transforms(
     }
 }
 
+#[derive(Resource)]
 pub(crate) struct EguiTextureBindGroups {
     pub(crate) bind_groups: HashMap<EguiTexture, BindGroup>,
 }

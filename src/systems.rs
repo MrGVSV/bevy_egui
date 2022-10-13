@@ -1,4 +1,4 @@
-use crate::{EguiContext, EguiInput, EguiOutput, EguiRenderOutput, EguiSettings, WindowSize};
+use crate::{EguiContext, EguiInputMap, EguiOutputMap, EguiRenderOutputMap, EguiSettings, EguiWindowSizeMap, WindowSize};
 #[cfg(feature = "open_url")]
 use bevy::log;
 use bevy::{
@@ -12,7 +12,6 @@ use bevy::{
         ButtonState, Input,
     },
     prelude::{EventReader, Time},
-    utils::HashMap,
     window::{
         CursorEntered, CursorLeft, CursorMoved, ReceivedCharacter, RequestRedraw, WindowCreated,
         WindowFocused, WindowId, Windows,
@@ -38,7 +37,7 @@ pub struct InputResources<'w, 's> {
     #[cfg(feature = "manage_clipboard")]
     egui_clipboard: Res<'w, crate::EguiClipboard>,
     keyboard_input: Res<'w, Input<KeyCode>>,
-    egui_input: ResMut<'w, HashMap<WindowId, EguiInput>>,
+    egui_input: ResMut<'w, EguiInputMap>,
     #[system_param(ignore)]
     marker: PhantomData<&'s usize>,
 }
@@ -47,14 +46,14 @@ pub struct InputResources<'w, 's> {
 pub struct WindowResources<'w, 's> {
     focused_window: Local<'s, Option<WindowId>>,
     windows: ResMut<'w, Windows>,
-    window_sizes: ResMut<'w, HashMap<WindowId, WindowSize>>,
+    window_sizes: ResMut<'w, EguiWindowSizeMap>,
     #[system_param(ignore)]
     _marker: PhantomData<&'s usize>,
 }
 
 pub fn init_contexts_on_startup(
     mut egui_context: ResMut<EguiContext>,
-    mut egui_input: ResMut<HashMap<WindowId, EguiInput>>,
+    mut egui_input: ResMut<EguiInputMap>,
     mut window_resources: WindowResources,
     egui_settings: Res<EguiSettings>,
 ) {
@@ -142,10 +141,7 @@ pub fn process_input(
         // that has been left.
         if cursor_left_window != Some(cursor_moved.id) {
             let scale_factor = egui_settings.scale_factor as f32;
-            let mut mouse_position: (f32, f32) = (cursor_moved.position / scale_factor).into();
-            mouse_position.1 = window_resources.window_sizes[&cursor_moved.id].height()
-                / scale_factor
-                - mouse_position.1;
+            let mouse_position: (f32, f32) = (cursor_moved.position / scale_factor).into();
             egui_context.mouse_position = Some((cursor_moved.id, mouse_position.into()));
             input_resources
                 .egui_input
@@ -291,7 +287,7 @@ pub fn process_input(
 
 fn update_window_contexts(
     egui_context: &mut EguiContext,
-    egui_input: &mut HashMap<WindowId, EguiInput>,
+    egui_input: &mut EguiInputMap,
     window_resources: &mut WindowResources,
     egui_settings: &EguiSettings,
 ) {
@@ -331,7 +327,7 @@ fn update_window_contexts(
 
 pub fn begin_frame(
     mut egui_context: ResMut<EguiContext>,
-    mut egui_input: ResMut<HashMap<WindowId, EguiInput>>,
+    mut egui_input: ResMut<EguiInputMap>,
 ) {
     for (id, ctx) in egui_context.ctx.iter_mut() {
         let raw_input = egui_input.get_mut(id).unwrap().raw_input.take();
@@ -344,8 +340,8 @@ pub fn process_output(
         EguiSettings,
     >,
     mut egui_context: ResMut<EguiContext>,
-    mut egui_output: ResMut<HashMap<WindowId, EguiOutput>>,
-    mut egui_render_output: ResMut<HashMap<WindowId, EguiRenderOutput>>,
+    mut egui_output: ResMut<EguiOutputMap>,
+    mut egui_render_output: ResMut<EguiRenderOutputMap>,
     #[cfg(feature = "manage_clipboard")] mut egui_clipboard: ResMut<crate::EguiClipboard>,
     mut windows: Option<ResMut<Windows>>,
     mut event: EventWriter<RequestRedraw>,

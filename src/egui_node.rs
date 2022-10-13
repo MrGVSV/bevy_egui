@@ -4,7 +4,7 @@ use crate::render_systems::{
 };
 use bevy::{
     core::cast_slice,
-    ecs::world::{FromWorld, World},
+    ecs::prelude::{Resource, FromWorld, World},
     render::{
         render_graph::{Node, NodeRunError, RenderGraphContext},
         render_resource::{
@@ -26,6 +26,7 @@ use bevy::{
     window::WindowId,
 };
 
+#[derive(Resource)]
 pub struct EguiPipeline {
     pipeline: RenderPipeline,
 

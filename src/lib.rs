@@ -64,11 +64,13 @@ use bevy::{
     asset::{AssetEvent, Assets, Handle},
     ecs::{
         event::EventReader,
-        schedule::{ParallelSystemDescriptorCoercion, SystemLabel},
+        schedule::{IntoSystemDescriptor, SystemLabel},
         system::ResMut,
+        prelude::Resource,
     },
     input::InputSystem,
     log,
+    prelude::{Deref, DerefMut},
     render::{render_graph::RenderGraph, texture::Image, RenderApp, RenderStage},
     utils::HashMap,
     window::WindowId,
@@ -84,7 +86,7 @@ use thread_local::ThreadLocal;
 pub struct EguiPlugin;
 
 /// A resource for storing global UI settings.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Resource, Clone, Debug, PartialEq)]
 pub struct EguiSettings {
     /// Global scale factor for egui widgets (`1.0` by default).
     ///
@@ -116,7 +118,7 @@ impl Default for EguiSettings {
     }
 }
 
-/// Is used for storing the input passed to Egui. The actual resource is `HashMap<WindowId, EguiInput>`.
+/// Is used for storing the input passed to Egui. The actual resource is `EguiInputMap`.
 ///
 /// It gets reset during the [`EguiSystem::ProcessInput`] system.
 #[derive(Clone, Debug, Default)]
@@ -125,11 +127,27 @@ pub struct EguiInput {
     pub raw_input: egui::RawInput,
 }
 
+/// Resource mapping [`WindowId`] to [`EguiInput`].
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct EguiInputMap(pub HashMap<WindowId, EguiInput>);
+
+/// Resource mapping [`WindowId`] to [`EguiOutput`].
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct EguiOutputMap(pub HashMap<WindowId, EguiOutput>);
+
+/// Resource mapping [`WindowId`] to [`EguiRenderOutput`].
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct EguiRenderOutputMap(pub HashMap<WindowId, EguiRenderOutput>);
+
+/// Resource mapping [`WindowId`] to [`WindowSize`].
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct EguiWindowSizeMap(pub HashMap<WindowId, WindowSize>);
+
 /// A resource for accessing clipboard.
 ///
 /// The resource is available only if `manage_clipboard` feature is enabled.
 #[cfg(feature = "manage_clipboard")]
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct EguiClipboard {
     #[cfg(not(target_arch = "wasm32"))]
     clipboard: ThreadLocal<Option<RefCell<Clipboard>>>,
@@ -209,7 +227,7 @@ pub struct EguiRenderOutput {
     pub textures_delta: egui::TexturesDelta,
 }
 
-/// Is used for storing Egui output. The actual resource is `HashMap<WindowId, EguiOutput>`.
+/// Is used for storing Egui output. The actual resource is [`EguiOutputMap`].
 #[derive(Clone, Default)]
 pub struct EguiOutput {
     /// The field gets updated during the [`EguiSystem::ProcessOutput`] system in the [`CoreStage::PostUpdate`].
@@ -217,7 +235,7 @@ pub struct EguiOutput {
 }
 
 /// A resource for storing `bevy_egui` context.
-#[derive(Clone)]
+#[derive(Resource, Clone)]
 pub struct EguiContext {
     ctx: HashMap<WindowId, egui::Context>,
     user_textures: HashMap<Handle<Image>, u64>,
@@ -433,10 +451,10 @@ impl Plugin for EguiPlugin {
     fn build(&self, app: &mut App) {
         let world = &mut app.world;
         world.insert_resource(EguiSettings::default());
-        world.insert_resource(HashMap::<WindowId, EguiInput>::default());
-        world.insert_resource(HashMap::<WindowId, EguiOutput>::default());
-        world.insert_resource(HashMap::<WindowId, WindowSize>::default());
-        world.insert_resource(HashMap::<WindowId, EguiRenderOutput>::default());
+        world.insert_resource(EguiInputMap::default());
+        world.insert_resource(EguiOutputMap::default());
+        world.insert_resource(EguiWindowSizeMap::default());
+        world.insert_resource(EguiRenderOutputMap::default());
         world.insert_resource(EguiManagedTextures::default());
         #[cfg(feature = "manage_clipboard")]
         world.insert_resource(EguiClipboard::default());
@@ -490,7 +508,7 @@ impl Plugin for EguiPlugin {
     }
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub(crate) struct EguiManagedTextures(HashMap<(WindowId, u64), EguiManagedTexture>);
 
 pub(crate) struct EguiManagedTexture {
@@ -500,7 +518,7 @@ pub(crate) struct EguiManagedTexture {
 }
 
 fn update_egui_textures(
-    mut egui_render_output: ResMut<HashMap<WindowId, EguiRenderOutput>>,
+    mut egui_render_output: ResMut<EguiRenderOutputMap>,
     mut egui_managed_textures: ResMut<EguiManagedTextures>,
     mut image_assets: ResMut<Assets<Image>>,
 ) {
@@ -518,7 +536,7 @@ fn update_egui_textures(
             if let Some(pos) = image_delta.pos {
                 // Partial update.
                 if let Some(managed_texture) =
-                    egui_managed_textures.0.get_mut(&(window_id, texture_id))
+                egui_managed_textures.0.get_mut(&(window_id, texture_id))
                 {
                     // TODO: when bevy supports it, only update the part of the texture that changes.
                     update_image_rect(&mut managed_texture.color_image, pos, &color_image);
@@ -553,7 +571,7 @@ fn update_egui_textures(
 
 fn free_egui_textures(
     mut egui_context: ResMut<EguiContext>,
-    mut egui_render_output: ResMut<HashMap<WindowId, EguiRenderOutput>>,
+    mut egui_render_output: ResMut<EguiRenderOutputMap>,
     mut egui_managed_textures: ResMut<EguiManagedTextures>,
     mut image_assets: ResMut<Assets<Image>>,
     mut image_events: EventReader<AssetEvent<Image>>,
@@ -647,7 +665,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Window ids passed to `EguiContext::ctx_for_windows_mut` must be unique"
+    expected = "Window ids passed to `EguiContext::ctx_for_windows_mut` must be unique"
     )]
     fn test_ctx_for_windows_mut_unique_check_panics() {
         let mut egui_context = EguiContext::new();
@@ -672,7 +690,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Window ids passed to `EguiContext::ctx_for_windows_mut` must be unique"
+    expected = "Window ids passed to `EguiContext::ctx_for_windows_mut` must be unique"
     )]
     fn test_try_ctx_for_windows_mut_unique_check_panics() {
         let mut egui_context = EguiContext::new();

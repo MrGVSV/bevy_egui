@@ -33,7 +33,8 @@ fn main() {
         .add_system(ui_example)
         .run();
 }
-#[derive(Default)]
+
+#[derive(Resource, Default)]
 struct UiState {
     label: String,
     value: f32,
@@ -232,7 +233,7 @@ impl Painting {
                 self.lines.clear();
             }
         })
-        .response
+            .response
     }
 
     pub fn ui_content(&mut self, ui: &mut egui::Ui) {
